@@ -1,15 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Security.Cryptography.X509Certificates;
-using System.Xml.Serialization;
 using Bogus;
 using Bogus.Extensions;
 using DbDataGenerator.Models;
 using Neo4j.Driver;
-using Newtonsoft.Json;
 
 namespace DbDataGenerator
 {
@@ -19,26 +14,22 @@ namespace DbDataGenerator
 
         static void Main(string[] args)
         {
-            Console.WriteLine("Hello World!");
             Randomizer.Seed = new Random((int)DateTime.Now.TimeOfDay.Ticks);
             var personalData = GeneratePersonalData();
             var employees = personalData.Take(20);
             var employeesObjects = GenerateEmployees(employees.ToList());
             var rooms = GenerateRooms();
-            var clients = personalData.Skip(20).ToList();
-            var roomService = GenerateRoomService(employeesObjects, rooms);
-            var bookings = GenerateBookings(employeesObjects, rooms, clients);
+            var bookings = GenerateBookings(employeesObjects, rooms, personalData);
             using var helper = new DbHelper();
             helper.ClearAllData();
             helper.AddIdTypes();
             helper.AddPersonalData(personalData);
             helper.AddEmployees(employeesObjects);
             helper.AddRooms(rooms);
-            helper.AddDamageCompensationReason();
             helper.AddBooking(bookings);
         }
 
-        #region MyRegion
+        #region DataGeneration
 
         private static List<PersonalData> GeneratePersonalData()
         {
@@ -69,26 +60,6 @@ namespace DbDataGenerator
                 .RuleFor(u => u.Area, f => f.Random.Number(20, 80))
                 .RuleFor(u => u.CostForDay, f => f.Random.Decimal(100, 500));
             return rooms.Generate(60);
-        }
-
-        private static List<RoomService> GenerateRoomService(List<Employee> employees, List<Room> Rooms)
-        {
-            var maids = employees.Where(e => e.Position == EmployeePosition.Сhambermaid);
-            var service = new Faker<RoomService>()
-                .CustomInstantiator(f => new RoomService())
-                .RuleFor(u => u.ServiceEmployee, f => f.PickRandom(maids))
-                .RuleFor(u => u.RoomToService, f => f.PickRandom(Rooms))
-                .RuleFor(u => u.DaysToService, f =>
-                {
-                    var alreadyChoosen = new List<DayOfWeek>();
-                    return f.Make(3, () =>
-                    {
-                        var item = f.PickRandomWithout<DayOfWeek>(alreadyChoosen.ToArray());
-                        alreadyChoosen.Add(item);
-                        return item;
-                    });
-                });
-            return service.Generate(60);
         }
 
         private static List<RoomBooking> GenerateBookings(List<Employee> employees, List<Room> rooms,
@@ -143,7 +114,7 @@ namespace DbDataGenerator
 
     class DbHelper : IDisposable
     {
-        private IDriver _driver = GraphDatabase.Driver("bolt://localhost:7687", AuthTokens.None);
+        private readonly IDriver _driver = GraphDatabase.Driver("bolt://localhost:7687", AuthTokens.None);
 
         public void ClearAllData()
         {
@@ -174,21 +145,6 @@ namespace DbDataGenerator
 
             }
         }
-
-        public void AddDamageCompensationReason()
-        {
-            using var session = _driver.Session();
-            foreach (DamageCompensationReason value in Enum.GetValues(typeof(DamageCompensationReason)))
-            {
-
-                var valStr = value.ToString();
-
-                var res = session.Run("MERGE (a:DamageCompensationReason {Reason : $valStr})", new { valStr });
-                res.Consume();
-
-            }
-        }
-
 
         public void AddPersonalData(List<PersonalData> persons)
         {
