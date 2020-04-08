@@ -153,7 +153,7 @@ namespace DbDataGenerator
             {
                 var IdType = person.IdType.ToString();
                 session.Run(@"MERGE (a:PersonalData {id: $Index, FirstName: $FirstName, LastName: $LastName, IdNumber: $IdNumber, IdType: $IdType})",
-                    new {person.Index, person.FirstName, person.LastName, person.IdNumber, IdType = person.IdType.ToString()});
+                    new {person.Index, person.FirstName, person.LastName, person.IdNumber, IdType });
             }
         }
 
