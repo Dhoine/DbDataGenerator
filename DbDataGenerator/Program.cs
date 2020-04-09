@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using Bogus;
 using Bogus.Extensions;
 using DbDataGenerator.Models;
 using Neo4j.Driver;
+using Newtonsoft.Json;
 
 namespace DbDataGenerator
 {
@@ -16,10 +18,10 @@ namespace DbDataGenerator
         {
             Randomizer.Seed = new Random((int)DateTime.Now.TimeOfDay.Ticks);
             var personalData = GeneratePersonalData();
-            var employees = personalData.Take(20);
-            var employeesObjects = GenerateEmployees(employees.ToList());
+            var employeesObjects = GenerateEmployees();
             var rooms = GenerateRooms();
             var bookings = GenerateBookings(employeesObjects, rooms, personalData);
+            File.WriteAllText("model.json", JsonConvert.SerializeObject(bookings));
             using var helper = new DbHelper();
             helper.ClearAllData();
             helper.AddIdTypes();
@@ -43,13 +45,13 @@ namespace DbDataGenerator
             return personalData.Generate(300);
         }
 
-        private static List<Employee> GenerateEmployees(List<PersonalData> personalData)
+        private static List<Employee> GenerateEmployees()
         {
             var employees = new Faker<Employee>()
                 .CustomInstantiator(f => new Employee())
                 .RuleFor(u => u.EmployeeIdNumber, f => f.UniqueIndex)
                 .RuleFor(u => u.Position, (f, u) => f.PickRandom<EmployeePosition>());
-            return employees.Generate(personalData.Count);
+            return employees.Generate(20);
         }
 
         private static List<Room> GenerateRooms()
