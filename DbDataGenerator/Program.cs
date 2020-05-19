@@ -1,9 +1,14 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using Bogus;
 using Bogus.Extensions;
+using CsvHelper;
+using CsvHelper.Configuration;
+using CsvHelper.TypeConversion;
 using DbDataGenerator.Models;
 using Neo4j.Driver;
 using Newtonsoft.Json;
@@ -21,14 +26,19 @@ namespace DbDataGenerator
             var employeesObjects = GenerateEmployees();
             var rooms = GenerateRooms();
             var bookings = GenerateBookings(employeesObjects, rooms, personalData);
-            File.WriteAllText("model.json", JsonConvert.SerializeObject(bookings));
-            using var helper = new DbHelper();
-            helper.ClearAllData();
-            helper.AddIdTypes();
-            helper.AddPersonalData(personalData);
-            helper.AddEmployees(employeesObjects);
-            helper.AddRooms(rooms);
-            helper.AddBooking(bookings);
+
+            new csvHelper().CreateCsv(bookings);
+
+
+            
+
+            //using var helper = new DbHelper();
+            //helper.ClearAllData();
+            //helper.AddIdTypes();
+            //helper.AddPersonalData(personalData);
+            //helper.AddEmployees(employeesObjects);
+            //helper.AddRooms(rooms);
+            //helper.AddBooking(bookings);
         }
 
         #region DataGeneration
@@ -89,6 +99,7 @@ namespace DbDataGenerator
                     return date;
                 })
                 .RuleFor(u => u.AdditionalService, (f, u) => new Faker<AdditionalServiceHistoricalItem>()
+                    .RuleFor(a => a.BookingId, () => u.Id)
                     .RuleFor(a => a.Id, f=> f.UniqueIndex)
                     .RuleFor(a => a.Date, f => f.Date.Between(u.DateFrom, u.DateTo))
                     .RuleFor(a => a.Employee, f => f.PickRandom(employees))
@@ -96,18 +107,40 @@ namespace DbDataGenerator
                     .RuleFor(a => a.Type, f => f.PickRandom<AdditionalServiceType>())
                     .GenerateBetween(2, 5))
                 .RuleFor(u => u.DamageCompensation, (f, u) => new Faker<DamageCompensationHistoryItem>()
+                    .RuleFor(a => a.BookingId, () => u.Id)
                     .RuleFor(a => a.Id, f => f.UniqueIndex)
                     .RuleFor(a => a.Date, f => f.Date.Between(u.DateFrom, u.DateTo))
                     .RuleFor(a => a.Price, f => f.Random.Decimal(20, 5000))
                     .RuleFor(a => a.Reason, f => f.PickRandom<DamageCompensationReason>())
                     .GenerateBetween(2, 5))
-                .Generate(50);
+                .Generate(100);
             return bookings;
         }
 
         #endregion
     }
 
+    class csvHelper
+    {
+        public void CreateCsv(List<RoomBooking> bookings)
+        {
+            var configuration = new CsvConfiguration(CultureInfo.InvariantCulture);
+            configuration.TypeConverterOptionsCache.AddOptions(typeof(DateTime), new TypeConverterOptions() { Formats = new[] { "yyyy-MM-dd'T'HH:mm:ss" } });
+
+            using var writer = new StreamWriter("Bookings.csv");
+            using var csv = new CsvWriter(writer, configuration);
+
+            csv.WriteRecords(bookings);
+
+            using var AdditionalServiceWriter = new StreamWriter("AdditionalService.csv");
+            using var AdditionalServiceCsv = new CsvWriter(AdditionalServiceWriter, configuration);
+            AdditionalServiceCsv.WriteRecords(bookings.SelectMany(b => b.AdditionalService));
+
+            using var CompensationsWriter = new StreamWriter("Compensations.csv");
+            using var CompensationsCsv = new CsvWriter(CompensationsWriter, configuration);
+            CompensationsCsv.WriteRecords(bookings.SelectMany(b => b.DamageCompensation));
+        }
+    }
     class BookedRoom
     {
         public Room room { get; set; }
